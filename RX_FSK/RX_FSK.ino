@@ -342,6 +342,8 @@ struct st_configitems config_list[] = {
   {"wifi", "Wifi mode (0/1/2/3)", 0, &sonde.config.wifi},
   {"debug", "Debug mode (0/1)", 0, &sonde.config.debug},
   {"maxsonde", "Maxsonde (requires reboot?)", 0, &sonde.config.maxsonde},
+  {"display", "Display mode (1/2/3)", 0, &sonde.config.display},
+  {"---", "---", -1, NULL},   
   /* Spectrum display settings */
   {"spectrum", "ShowSpectrum (s)", 0, &sonde.config.spectrum},
   {"startfreq", "Startfreq (MHz)", 0, &sonde.config.startfreq},

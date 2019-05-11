@@ -9,6 +9,8 @@ extern U8X8_SSD1306_128X64_NONAME_SW_I2C *u8x8;
 
 //SondeInfo si = { STYPE_RS41, 403.450, "P1234567", true, 48.1234, 14.9876, 543, 3.97, -0.5, true, 120 };
 const char *sondeTypeStr[5] = { "DFM6", "DFM9", "RS41" };
+int last_display = 1;                         // default display mode
+bool mode_switch = false;                     // display mode switch status
 
 static unsigned char kmh_tiles[] U8X8_PROGMEM = {
    0x1F, 0x04, 0x0A, 0x11, 0x00, 0x1F, 0x02, 0x04, 0x42, 0x3F, 0x10, 0x08, 0xFC, 0x22, 0x20, 0xF8
@@ -69,6 +71,7 @@ Sonde::Sonde() {
 	config.debug=0;
 	config.wifi=1;
 	config.wifiap=1;
+	config.display=1;
 	config.startfreq=400;
 	config.channelbw=10;
 	config.spectrum=10;
@@ -125,6 +128,8 @@ void Sonde::setConfig(const char *cfg) {
 		config.wifi = atoi(val);			
 	} else if(strcmp(cfg,"wifiap")==0) {
 		config.wifiap = atoi(val);
+	} else if(strcmp(cfg,"display")==0) {
+		config.display = atoi(val);
 	} else if(strcmp(cfg,"startfreq")==0) {
 		config.startfreq = atoi(val);
 	} else if(strcmp(cfg,"channelbw")==0) {
@@ -271,8 +276,16 @@ void Sonde::updateDisplayPos2() {
 		u8x8->drawString(10,4,"      ");
 		return;
 	}
-	snprintf(buf, 16, si()->alt>999?" %5.0fm":" %3.1fm", si()->alt);
-	u8x8->drawString((10+6-strlen(buf)),2,buf);
+	if (config.display < 2) {
+		snprintf(buf, 16, si()->alt>999?" %5.0fm":" %3.1fm", si()->alt);
+		u8x8->drawString((10+6-strlen(buf)),2,buf);
+		if (mode_switch) { u8x8->drawString(12,1, "    "); }						// clear remaining pos from other display mode
+	} else if (config.display > 1) {
+		if (mode_switch) {u8x8->drawString(10,2, "      ");	}						// clear remaining pos from other display mode
+		if (config.display == 3) {
+			u8x8->drawString(12,1, sondeTypeStr[si()->type]);
+		}
+	}
 	snprintf(buf, 16, si()->hs>99?" %3.0f":" %2.1f", si()->hs);
 	u8x8->drawString((10+4-strlen(buf)),3,buf);
 	snprintf(buf, 16, " %+2.1f", si()->vs);
@@ -282,9 +295,21 @@ void Sonde::updateDisplayPos2() {
 }
 
 void Sonde::updateDisplayID() {
-        u8x8->setFont(u8x8_font_chroma48medium8_r);
+	char buf[10];
+    u8x8->setFont(u8x8_font_chroma48medium8_r);
 	if(si()->validID) {
-        	u8x8->drawString(0,1, si()->id);
+		if (config.display < 2) {
+		    u8x8->drawString(0,1, si()->id);
+		} else {
+			u8x8->setFont(u8x8_font_7x14_1x2_r);
+			if (mode_switch) {u8x8->drawString(0,7, "  ");	}						// clear remaining pos from other display mode
+			u8x8->drawString(0,0, si()->id);
+			if (config.display > 2) {
+				u8x8->setFont(u8x8_font_chroma48medium8_r);
+				snprintf(buf, 16, "%3.3f", si()->freq);
+				u8x8->drawString(9,0, buf);
+			}
+		}
 	} else {
 		u8x8->drawString(0,1, "nnnnnnnn        ");
 	}
@@ -293,12 +318,22 @@ void Sonde::updateDisplayID() {
 void Sonde::updateDisplayRSSI() {
 	char buf[16];
 	u8x8->setFont(u8x8_font_7x14_1x2_r);
-	snprintf(buf, 16, "-%d   ", sonde.si()->rssi/2);
-	int len=strlen(buf)-3;
-	buf[5]=0;
-	u8x8->drawString(0,6,buf);
-	u8x8->drawTile(len,6,1,(sonde.si()->rssi&1)?halfdb_tile1:empty_tile1);
-	u8x8->drawTile(len,7,1,(sonde.si()->rssi&1)?halfdb_tile2:empty_tile2);
+
+	if (config.display < 2) {
+		if (mode_switch) {u8x8->drawString(4,5,"  "); }
+		snprintf(buf, 16, "-%d   ", sonde.si()->rssi/2);
+		int len=strlen(buf)-3;
+		buf[5]=0;
+		u8x8->drawString(0,6,buf);
+		u8x8->drawTile(len,6,1,(sonde.si()->rssi&1)?halfdb_tile1:empty_tile1);
+		u8x8->drawTile(len,7,1,(sonde.si()->rssi&1)?halfdb_tile2:empty_tile2);
+	} else {
+		if(si()->validPos) {
+			snprintf(buf, 16, si()->alt>999?"%5.0fm":"%3.1fm", si()->alt);
+			if (mode_switch) {u8x8->drawString(4,6," "); }							// clear remaining pos from other display mode
+			u8x8->drawString(0,6,buf);
+		}
+	}
 }
 
 void Sonde::updateStat() {
@@ -313,16 +348,24 @@ void Sonde::updateStat() {
 
 void Sonde::updateDisplayRXConfig() {
 	char buf[16];
-	u8x8->setFont(u8x8_font_chroma48medium8_r);
-	u8x8->drawString(0,0, sondeTypeStr[si()->type]);
-	snprintf(buf, 16, "%3.3f MHz", si()->freq);
-	u8x8->drawString(5,0, buf);
-    //snprintf(buf, 6, "%s", si()->launchsite);
-    //u8x8->drawString(9,1, buf);		
+	if (config.display < 2) {
+		u8x8->setFont(u8x8_font_chroma48medium8_r);
+		if (mode_switch) {u8x8->drawString(3,0, "   "); }							// clear remaining pos from other display mode
+		u8x8->drawString(4,0, " ");
+		u8x8->drawString(0,0, sondeTypeStr[si()->type]);
+		snprintf(buf, 16, "%3.3f MHz", si()->freq);
+		u8x8->drawString(5,0, buf);
+	} else {
+		if (mode_switch) {u8x8->drawString(5,0, "           ");	}					// clear remaining pos from other display mode
+	}
 }
 
 void Sonde::updateDisplayIP() {
+	if (config.display < 2) {
         u8x8->drawTile(5, 7, 11, myIP_tiles);
+	} else {
+		u8x8->drawTile(5, 7, 11, myIP_tiles);
+	}
 }
 
 // Probing RS41
@@ -342,13 +385,23 @@ void Sonde::updateDisplayScanner() {
 void Sonde::updateDisplay()
 {
 	char buf[16];
+
+	if (config.display != last_display) {											// has display mode changed?
+		mode_switch = true;															// so we have to do some cleanup once
+		last_display = config.display;												// store current active mode
+	} else {
+		mode_switch = false;
+	}
+
+	(if config.debug == 1) {Serial.printf("Display config: %d Mode switch: %s \n", config.display, (mode_switch ? "true" : "false"));}
+
 	updateDisplayRXConfig();
 	updateDisplayID();
 	updateDisplayPos();
 	updateDisplayPos2();
+    updateDisplayIP();				// moved before RSSI due to overlap in display mode=2
 	updateDisplayRSSI();
 	updateStat();
-    updateDisplayIP();
 }
 
 void Sonde::clearDisplay() {
