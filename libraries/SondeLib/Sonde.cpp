@@ -393,7 +393,7 @@ void Sonde::updateDisplay()
 		mode_switch = false;
 	}
 
-	(if config.debug == 1) {Serial.printf("Display config: %d Mode switch: %s \n", config.display, (mode_switch ? "true" : "false"));}
+	if (config.debug == 1) {Serial.printf("Display config: %d Mode switch: %s \n", config.display, (mode_switch ? "true" : "false"));}
 
 	updateDisplayRXConfig();
 	updateDisplayID();
